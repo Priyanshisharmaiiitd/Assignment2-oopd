@@ -1,0 +1,584 @@
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <sstream>
+#include <ctime>
+#include <vector>
+
+using namespace std;
+
+const int MAX_BOOKS = 100;
+const int MAX_MAGAZINES = 81;
+const int MAX_JOURNALS = 99;
+const int MAX_STUDENTS = 100;
+const int MAX_FACULTY = 100;
+
+class LibraryItem {
+public:
+    string item_id;
+    string title;
+    string original_title;
+};
+
+class Book : public LibraryItem {
+public:
+    string isbn;
+    string authors;
+    string count;
+};
+
+class Magazine : public LibraryItem {
+public:
+    string publication;
+    string rank;
+};
+
+class Journal {
+public:
+    string journal_name;
+};
+
+class BorrowedItem {
+public:
+    string item_id;
+    string user_id;
+    time_t borrowing_date;
+    time_t due_date;
+    string borrowing_location;
+};
+
+class User {
+public:
+    string user_name;
+    string user_id;
+    string user_type;
+    bool is_borrowed;
+    time_t request_date;
+    time_t due_date;
+    string borrowed_item_id;
+    vector<BorrowedItem> borrowed_items_on_loan; 
+};
+
+int readBooks(Book books[]) {
+    ifstream booksFile("books.csv");
+    if (!booksFile.is_open()) {
+        cerr << "Error: Unable to open books.csv" << endl;
+        return 1;
+    }
+
+    string line;
+    getline(booksFile, line);
+
+    int booksCount = 0;
+    char delimiter = ',';
+
+    while (getline(booksFile, line)) {
+        stringstream ss(line);
+
+        getline(ss, books[booksCount].item_id, delimiter);
+        getline(ss, books[booksCount].count, delimiter);
+        getline(ss, books[booksCount].isbn, delimiter);
+        getline(ss, books[booksCount].authors, delimiter);
+        getline(ss, books[booksCount].title, delimiter);
+        getline(ss, books[booksCount].original_title, delimiter);
+
+        booksCount++;
+
+        if (booksCount >= MAX_BOOKS) {
+            cerr << "Warning: Maximum number of books reached." << endl;
+            break;
+        }
+    }
+
+    booksFile.close();
+    return booksCount;
+}
+
+int readMagazines(Magazine magazines[]) {
+    ifstream magazinesFile("magazines.csv");
+    if (!magazinesFile.is_open()) {
+        cerr << "Error: Unable to open magazines.csv" << endl;
+        return 1;
+    }
+
+    string line;
+    getline(magazinesFile, line);
+
+    int magazinesCount = 0;
+    char delimiter = ',';
+
+    while (getline(magazinesFile, line)) {
+        stringstream ss(line);
+
+        getline(ss, magazines[magazinesCount].publication, delimiter);
+        getline(ss, magazines[magazinesCount].rank, delimiter);
+
+        magazinesCount++;
+
+        if (magazinesCount >= MAX_MAGAZINES) {
+            cerr << "Warning: Maximum number of magazines reached." << endl;
+            break;
+        }
+    }
+
+    magazinesFile.close();
+    return magazinesCount;
+}
+
+int readJournals(Journal journals[]) {
+    ifstream journalFile("journals.csv");
+    if (!journalFile.is_open()) {
+        cerr << "Error: Unable to open journals.csv" << endl;
+        return 1;
+    }
+
+    int journalsCount = 0;
+
+    string line;
+    while (getline(journalFile, line)) {
+        if (journalsCount < MAX_JOURNALS) {
+            journals[journalsCount].journal_name = line;
+            journalsCount++;
+        } else {
+            cerr << "Warning: Maximum number of journals reached." << endl;
+            break;
+        }
+    }
+
+    journalFile.close();
+    return journalsCount;
+}
+
+void borrowBook(Book books[], User users[], int& userCount, int booksCount) {
+    string book_id;
+    cout << "Enter book_id: ";
+    cin >> book_id;
+
+   
+    int userIndex = -1;
+    for (int i = 0; i < userCount; i++) {
+        if (users[i].user_id == users[userCount - 1].user_id) {
+            userIndex = i;
+            break;
+        }
+    }
+
+    if (userIndex == -1) {
+        cout << "Error: User not found." << endl;
+        return;
+    }
+
+    for (int i = 0; i < booksCount; i++) {
+        if (book_id == books[i].item_id && stoi(books[i].count) > 0) {
+            bool alreadyBorrowed = false;
+            for (int j = 0; j < userCount; j++) {
+                if (users[j].user_id == users[userIndex].user_id && users[j].borrowed_item_id == book_id) {
+                    alreadyBorrowed = true;
+                    break;
+                }
+            }
+
+            if (alreadyBorrowed) {
+                cout << "You have already borrowed this book. Please return it before borrowing again." << endl;
+                return;
+            }
+
+            cout << "Book borrowed successfully" << endl;
+            books[i].count = to_string(stoi(books[i].count) - 1);
+
+            users[userIndex].is_borrowed = true;
+            time(&users[userIndex].request_date);
+
+            struct tm* due_date_tm;
+            time_t now = time(nullptr);
+            due_date_tm = localtime(&now);
+
+            if (users[userIndex].user_type == "student") {
+                due_date_tm->tm_mon += 1;
+            } else if (users[userIndex].user_type == "faculty") {
+                due_date_tm->tm_mon += 6;
+            }
+
+            users[userIndex].due_date = mktime(due_date_tm);
+            users[userIndex].borrowed_item_id = book_id;
+
+            return;
+        }
+    }
+
+    cout << "Sorry, all copies of this book are already borrowed or the book does not exist." << endl;
+}
+
+void borrowItemOnLoan(User users[], int& userCount, int booksCount, int magazinesCount, int journalsCount) {
+    string item_id;
+    cout << "Enter item_id to borrow on loan: ";
+    cin >> item_id;
+
+    int userIndex = -1;
+    for (int i = 0; i < userCount; i++) {
+        if (users[i].user_id == users[userCount - 1].user_id) {
+            userIndex = i;
+            break;
+        }
+    }
+
+    if (userIndex == -1) {
+        cout << "Error: User not found." << endl;
+        return;
+    }
+
+    cout << "Select borrowing library location:" << endl;
+    cout << "1. Nearby Library A" << endl;
+    cout << "2. Nearby Library B" << endl;
+    int libraryChoice;
+    cin >> libraryChoice;
+
+    string borrowingLocation;
+    if (libraryChoice == 1) {
+        borrowingLocation = "Nearby Library A";
+    } else if (libraryChoice == 2) {
+        borrowingLocation = "Nearby Library B";
+    } else {
+        cout << "Invalid library choice." << endl;
+        return;
+    }
+    BorrowedItem borrowedItem;
+    borrowedItem.item_id = item_id;
+    borrowedItem.user_id = users[userIndex].user_id;
+    borrowedItem.borrowing_location = borrowingLocation;
+    time(&borrowedItem.borrowing_date);
+    struct tm* due_date_tm;
+    time_t now = time(nullptr);
+    due_date_tm = localtime(&now);
+    due_date_tm->tm_mday += 7;
+    borrowedItem.due_date = mktime(due_date_tm);
+
+    users[userIndex].borrowed_items_on_loan.push_back(borrowedItem);
+
+    cout << "Item borrowed on loan successfully from " << borrowingLocation << endl;
+}
+
+void returnItemOnLoan(User users[], int& userCount) {
+    int userIndex = -1;
+    for (int i = 0; i < userCount; i++) {
+        if (users[i].user_id == users[userCount - 1].user_id) {
+            userIndex = i;
+            break;
+        }
+    }
+
+    if (userIndex == -1) {
+        cout << "Error: User not found." << endl;
+        return;
+    }
+
+    cout << "Items borrowed on loan by " << users[userIndex].user_name << ":" << endl;
+    for (int i = 0; i < users[userIndex].borrowed_items_on_loan.size(); i++) {
+        cout << i + 1 << ". Item ID: " << users[userIndex].borrowed_items_on_loan[i].item_id
+             << ", Borrowing Location: " << users[userIndex].borrowed_items_on_loan[i].borrowing_location << endl;
+    }
+
+    int itemChoice;
+    cout << "Enter the number of the item to return: ";
+    cin >> itemChoice;
+
+    if (itemChoice >= 1 && itemChoice <= users[userIndex].borrowed_items_on_loan.size()) {
+         users[userIndex].borrowed_items_on_loan[itemChoice - 1].due_date = 0; // Reset due date
+        cout << "Item returned successfully." << endl;
+    } else {
+        cout << "Invalid item choice." << endl;
+    }
+}
+
+void displayBorrowedItemsOnLoan(User users[], int userCount) {
+    int userIndex = -1;
+    for (int i = 0; i < userCount; i++) {
+        if (users[i].user_id == users[userCount - 1].user_id) {
+            userIndex = i;
+            break;
+        }
+    }
+
+    if (userIndex == -1) {
+        cout << "Error: User not found." << endl;
+        return;
+    }
+
+    cout << "Items borrowed on loan by " << users[userIndex].user_name << ":" << endl;
+    for (int i = 0; i < users[userIndex].borrowed_items_on_loan.size(); i++) {
+        BorrowedItem borrowedItem = users[userIndex].borrowed_items_on_loan[i];
+        cout << i + 1 << ". Item ID: " << borrowedItem.item_id
+             << ", Borrowing Location: " << borrowedItem.borrowing_location
+             << ", Due Date: " << ctime(&borrowedItem.due_date);
+    }
+}
+
+void searchLocationBook(Book books[], int booksCount) {
+    string book_id;
+    cout << "Enter book_id to search: ";
+    cin >> book_id;
+
+    for (int i = 0; i < booksCount; i++) {
+        if (book_id == books[i].item_id) {
+            cout << "Location of Book with ID " << book_id << " is on Shelf 1, Section A" << endl;
+            return;
+        }
+    }
+
+    cout << "Book with ID " << book_id << " not found in the library." << endl;
+}
+void searchLocationMagazine(Magazine magazines[], int magazinesCount) {
+    string magazine_rank;
+    cout << "Enter magazine_rank to search: ";
+    cin >> magazine_rank;
+
+    for (int i = 0; i < magazinesCount; i++) {
+        if (magazine_rank == magazines[i].rank) {
+            cout << "Location of Magazine with Rank " << magazine_rank << " is on Shelf 2, Section B" << endl;
+            return;
+        }
+    }
+
+    cout << "Magazine with Rank " << magazine_rank << " not found in the library." << endl;
+}
+
+void borrowMagazine(Magazine magazines[], User users[], int& userCount, int magazinesCount) {
+    string magazine_rank;
+    cout << "Enter magazine_rank: ";
+    cin >> magazine_rank;
+
+    // Check if the magazine with the specified rank exists
+    bool magazineExists = false;
+    for (int i = 0; i < magazinesCount; i++) {
+        if (magazine_rank == magazines[i].rank && stoi(magazines[i].rank) > 0) {
+            magazineExists = true;
+            break;
+        }
+    }
+
+    if (!magazineExists) {
+        cout << "Sorry, this magazine does not exist." << endl;
+        return;
+    }
+
+    // Check if the magazine is already borrowed by the user
+    for (int i = 0; i < userCount; i++) {
+        if (users[i].user_id == users[userCount].user_id && users[i].borrowed_item_id == magazine_rank) {
+            cout << "You have already borrowed this magazine. Please return it before borrowing again." << endl;
+            return;
+        }
+    }
+    for (int i = 0; i < magazinesCount; i++) {
+        if (magazine_rank == magazines[i].rank && stoi(magazines[i].rank) > 0) {
+            cout << "Magazine borrowed successfully" << endl;
+            magazines[i].rank = to_string(stoi(magazines[i].rank) - 1);
+
+            users[userCount].is_borrowed = true;
+            time(&users[userCount].request_date);
+            users[userCount].due_date = -1; 
+            users[userCount].borrowed_item_id = magazine_rank;
+
+            userCount++;
+            return;
+        }
+    }
+
+    cout << "Sorry, this magazine is already borrowed or the magazine does not exist." << endl;
+}
+
+void borrowJournal(Journal journals[], User users[], int& userCount, int journalsCount) {
+    string journal_name;
+    cout << "Enter journal_name: ";
+    cin >> journal_name;
+
+    for (int i = 0; i < journalsCount; i++) {
+        if (journal_name == journals[i].journal_name) {
+            cout << "Journal borrowed and no need to return this as this is an electronic item" << endl;
+            users[userCount].is_borrowed = true;
+            time(&users[userCount].request_date);
+            users[userCount].due_date = -1; // No due date for journals
+            users[userCount].borrowed_item_id = journal_name;
+
+            userCount++;
+            return;
+        }
+    }
+
+    cout << "This journal is not available with us." << endl;
+}
+void printBooks(Book books[], int booksCount) {
+    cout << "\nBooks in Library:" << endl;
+    for (int i = 0; i < booksCount; i++) {
+        cout << "Book " << i + 1 << ": " << books[i].item_id << ", " << books[i].title << ", " << books[i].isbn << ", " << books[i].authors << ", " << books[i].original_title << ", Count: " << books[i].count << endl;
+    }
+}
+
+void printMagazines(Magazine magazines[], int magazinesCount) {
+    cout << "\nMagazines in Library:" << endl;
+    for (int i = 0; i < magazinesCount; i++) {
+        cout << "Magazine " << i + 1 << ": " << magazines[i].publication << ", Rank: " << magazines[i].rank << endl;
+    }
+}
+
+void printJournals(Journal journals[], int journalsCount) {
+    cout << "\nJournals in Library:" << endl;
+    for (int i = 0; i < journalsCount; i++) {
+        cout << "Journal " << i + 1 << ": " << journals[i].journal_name << endl;
+    }
+}
+
+int main() {
+    Book books[MAX_BOOKS];
+    Magazine magazines[MAX_MAGAZINES];
+    Journal journals[MAX_JOURNALS];
+    User users[MAX_STUDENTS + MAX_FACULTY];
+
+    int booksCount = readBooks(books);
+    int magazinesCount = readMagazines(magazines);
+    int journalsCount = readJournals(journals);
+    int userCount = 0;
+    printBooks(books, booksCount);
+    printMagazines(magazines, magazinesCount);
+    printJournals(journals, journalsCount);
+
+    int choice;
+    string item_type;
+
+    do {
+        cout << "\nMenu:" << endl;
+        cout << "1. Borrow an item" << endl;
+        cout << "2. Borrow an item on loan" << endl;
+        cout << "3. Return an item on loan" << endl;
+        cout << "4. Display borrowed items on loan" << endl;
+        cout << "5. Search for item location" << endl;
+        cout << "6. Register a new user" << endl;
+        cout << "7. Purchase a new book" << endl;
+        cout << "8. Exit" << endl;
+
+        cin >> choice;
+
+        switch (choice) {
+            case 1:
+               
+                cout << "Enter user name: ";
+                cin >> users[userCount].user_name;
+                cout << "Enter user id: ";
+                cin >> users[userCount].user_id;
+                cout << "Enter user type (student or faculty): ";
+                cin >> users[userCount].user_type;
+
+                if (users[userCount].user_type == "student" || users[userCount].user_type == "faculty") {
+                    cout << "Enter item type (book, magazine, or journal): ";
+                    cin >> item_type;
+
+                    if (item_type == "book") {
+                        borrowBook(books, users, userCount, booksCount);
+                    } else if (item_type == "magazine") {
+                         borrowMagazine(magazines, users, userCount, magazinesCount);
+                      
+                    } else if (item_type == "journal") {
+                        borrowJournal(journals, users, userCount, journalsCount);
+                       
+                    } else {
+                        cout << "Invalid item type." << endl;
+                    }
+                } else {
+                    cout << "Invalid user type." << endl;
+                }
+                break;
+            case 2:
+                
+                cout << "Enter user name: ";
+                cin >> users[userCount].user_name;
+                cout << "Enter user id: ";
+                cin >> users[userCount].user_id;
+
+                borrowItemOnLoan(users, userCount, booksCount, magazinesCount, journalsCount);
+                break;
+        
+            case 3:
+              
+                cout << "Enter user name: ";
+                cin >> users[userCount].user_name;
+                cout << "Enter user id: ";
+                cin >> users[userCount].user_id;
+
+                returnItemOnLoan(users, userCount);
+                break;
+            case 4:
+                
+                cout << "Enter user name: ";
+                cin >> users[userCount].user_name;
+                cout << "Enter user id: ";
+                cin >> users[userCount].user_id;
+
+                displayBorrowedItemsOnLoan(users, userCount);
+                break;
+            case 5:
+                cout << "Enter item type to search (book, magazine, or journal): ";
+                cin >> item_type;
+
+                if (item_type == "book") {
+                    searchLocationBook(books, booksCount);
+                } else if (item_type == "magazine") {
+                     searchLocationMagazine(magazines, magazinesCount);
+                    
+                } else if (item_type == "journal") {
+                    cout << "Search for journals is not implemented." << endl;
+                    
+                } else {
+                    cout << "Invalid item type." << endl;
+                }
+                break;
+            case 6:
+             if (userCount < MAX_STUDENTS + MAX_FACULTY) {
+                    cout << "Enter user name: ";
+                    cin >> users[userCount].user_name;
+                    cout << "Enter user id: ";
+                    cin >> users[userCount].user_id;
+                    cout << "Enter user type (student or faculty): ";
+                    cin >> users[userCount].user_type;
+                    users[userCount].is_borrowed = false;
+                    users[userCount].due_date = 0;
+                    users[userCount].borrowed_item_id = "";
+                    userCount++;
+                } else {
+                    cout << "Maximum number of users reached." << endl;
+                }
+                break;
+                
+                
+            case 7:
+              
+                if (booksCount < MAX_BOOKS) {
+                    cout << "Enter book_id: ";
+                    cin >> books[booksCount].item_id;
+                    cout << "Enter book title: ";
+                    cin.ignore();
+                    getline(cin, books[booksCount].title);
+                    cout << "Enter book original title: ";
+                    getline(cin, books[booksCount].original_title);
+                    cout << "Enter book ISBN: ";
+                    cin >> books[booksCount].isbn;
+                    cout << "Enter book authors: ";
+                    cin.ignore();
+                    getline(cin, books[booksCount].authors);
+                    cout << "Enter book count: ";
+                    cin >> books[booksCount].count;
+                    booksCount++;
+                } else {
+                    cout << "Maximum number of books reached." << endl;
+                }
+                break;
+                
+                
+            case 8:
+                cout << "Exiting the program." << endl;
+                break;
+            default:
+                cout << "Invalid choice. Please try again." << endl;
+        }
+    } while (choice != 8);
+
+    return 0;
+}
